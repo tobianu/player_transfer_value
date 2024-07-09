@@ -1,0 +1,599 @@
+---
+title: "EPL_Project"
+subtitle: "Kogod School of Business"
+author: "Ogunronbi O."
+date: "2024-04-01"
+
+format: 
+   docx:
+     toc: true
+     toc-depth: 2
+     
+fig-width: 10
+fig-height: 6
+fontsize: 10pt
+code-overflow: wrap
+geometry: "left = 2cm, right = 2cm, top = 2cm, bottom = 2cm"
+
+echo: true
+include: true
+warning: false
+message: false
+
+abstract: This Quarto file contains preliminary data analysis of the project datasets for the EPL.
+---
+# Load Packages
+```{r}
+library(dplyr)
+library(caret)
+```
+
+# Descriptive Analysis
+
+### Loading the Data sets
+Load the **EPL_Dataset** data file to working directory. Then read the **EPL_Dataset.csv**data file into a data frame object named **EPL**
+
+```{r}
+epl <- read.csv("EPL_Dataset.csv")
+head(epl)
+str(epl)
+```
+
+### Cleaning: Remove `player_name` and `country`
+```{r}
+epl <- subset(epl, select = -player_name)
+epl <- subset(epl, select = -country)
+epl
+```
+
+1a) To describe the data quantitatively. First get a`summary()` of the **epl** data frame and inspect the frequencies.
+
+```{r}
+summary(epl)
+```
+### Mean, Standard Deviation & Variance
+1b) Compute the **mean**,**standard deviation** and **variance** for all the values in the income.vect vector. Store the respective results in variables name **mean.inc**, **min.inc**, etc. Then, use the `c()` function to create a vector called **income.stats** with 5 values you computed above. Then use the `names()` function to give the corresponding names "Mean", "Min", "Max", "StDev", and "Var". Then display the income.stats vector, but wrap it within the `round()` function with a parameter `digits = 2` to display only 2 decimals.
+
+**Technical Note:** The `names()` function needs to create a vector with the respective names above, which need to correspond to the values in **income.vect**. Therefore, you need to use the `c()` function to create a vector with these 5 names.
+
+```{r}
+# Compute means, standard deviations, and variances for multiple variables at once
+summary_stats <- sapply(epl[, c("age", "transfer_value", "goals", "assists", "appear", "mins_played")], function(x) {
+  c(mean = mean(x), sd = sd(x), var = var(x))
+})
+
+# Round the summary statistics to 2 decimal places
+summary_stats <- round(summary_stats, digits = 2)
+
+# Create a data frame with the summary statistics
+df <- data.frame(
+  names = c("age", "transfer value", "goals", "assists", "appear", "mins_played"),
+  mean_all = summary_stats["mean", ],
+  sd_all = summary_stats["sd", ],
+  var_all = summary_stats["var", ]
+)
+
+print(df)
+
+```
+
+Distribution of key variables (e.g., normal, skewed, Poisson, binary, etc.), complemented by histograms, if needed.
+
+```{r}
+#par(mfrow = c(2,3))
+
+hist(epl$age, 
+     main = "Age Histogram", xlab = "age", col = "422062")
+qqnorm(epl$age)
+qqline(epl$age)
+
+hist(epl$transfer_value, 
+     main = "Transfer Value Histogram", xlab = "transfer_age", col = "422062")
+qqnorm(epl$transfer_value)
+qqline(epl$transfer_value)
+
+#par(mfrow = c(1,1))
+```
+
+
+```{r}
+par(mfrow = c(2,3))
+
+hist(epl$goals, 
+     main = "Goal Histogram", xlab = "goals", col = "422062")
+qqnorm(epl$goals)
+qqline(epl$goals)
+
+
+hist(epl$assists, 
+     main = "Assists Histogram", xlab = "assists", col = "422062")
+qqnorm(epl$assists)
+qqline(epl$assists)
+
+par(mfrow = c(1,1))
+```
+
+```{r}
+par(mfrow = c(2,3))
+
+hist(epl$appear, 
+     main = "Appear Histogram", xlab = "appear", col = "422062")
+qqnorm(epl$appear)
+qqline(epl$appear)
+
+hist(epl$mins_played, 
+     main = "Mins Played Histogram", xlab = "mins_played", col = "422062")
+qqnorm(epl$mins_played)
+qqline(epl$mins_played)
+
+par(mfrow = c(1,1))
+```
+
+Correlation and co-variation analysis (e.g., correlation analysis, ANOVA, chi-square tests of independence), which can be complemented by plots and graphs, if needed.
+
+Correlation **Quantitative variables only**
+
+```{r}
+#install.packages("corrplot")
+library(corrplot)
+
+# Assuming epl is your dataframe and contains these columns
+# Compute the correlation matrix
+epl.mat <- cor(epl[, c("age", "transfer_value", "goals", "assists", "appear", "mins_played")])
+
+# Print the correlation matrix
+print(epl.mat)
+
+# Create a standard correlation plot with numerical values
+corrplot(epl.mat, method = "number")
+
+# Create a hierarchical clustered plot
+corrplot(epl.mat, order = "hclust", addrect = 2)
+
+```
+
+ANOVA *categorical and quantitative variables*
+
+```{r}
+options(scipen = 4)
+epl.anova <- aov(transfer_value ~ age + mins_played + goals + assists + appear + 
+                   nationality, 
+                 data = epl)
+summary(epl.anova)
+```
+
+```{r Visual}
+library(GGally)
+
+bp.epl <- ggpairs(data.frame("transfer Value"= epl$transfer_value, "Mins Played" = 
+                               epl$mins_played, "Goals" = epl$goals, upper = 
+                              list(combo = 'box')))
+bp.epl
+
+
+```
+
+```{r}
+library(GGally)
+
+
+bp.epl1 <-ggpairs(data.frame("Age" = epl$age, "Assists" = epl$assists, "Appear" = epl$appear,  upper = list(combo = 'box')))
+
+bp.epl1
+
+```
+
+# 5. Modeling methods and Specification
+### Label encoding for categorical data (nationality)
+```{r}
+epl$nationality <- ifelse(epl$nationality == "European", 1, 0)
+table(epl$nationality)
+str(epl)
+```
+
+# Fitting the Basic Model
+### OLS Model
+```{r}
+library(glmnet)
+library(pls)
+
+# Setting the seed for reproducibility
+set.seed(123)
+
+# OLS Model
+ols_model <- lm(transfer_value ~ ., data = epl)
+```
+
+### 5.3 OLS Assumption Testings
+
+#### Homoscedasticity (Graphical method)
+```{r}
+# Load necessary libraries
+library(ggplot2)
+
+# Assume 'model' is your lm model object
+# Calculate residuals and predicted values
+residuals <- residuals(ols_model)
+predicted_values <- fitted(ols_model)
+
+# Create a data frame for plotting
+data_for_plot <- data.frame(Residuals = residuals, Predicted = predicted_values)
+
+# Generate the plot
+ggplot(data_for_plot, aes(x = Predicted, y = Residuals)) +
+  geom_point(alpha = 0.5) +  # Add points with some transparency
+  geom_hline(yintercept = 0, linetype = "dashed", color = "red") +  # Add a horizontal line at y = 0
+  labs(title = "Residuals vs. Predicted Values",
+       x = "Predicted Values",
+       y = "Residuals") +
+  theme_minimal() +  # Use a minimal theme for a clean look
+  theme(plot.title = element_text(hjust = 0.5))  # Center the plot title
+
+```
+
+#### Homoscedasticity (BP Test)
+```{r}
+library(lmtest)
+bptest(ols_model)
+```
+#### Multicollinearity
+```{r}
+library(car)
+vif(ols_model)  # Replace 'model' with your model object
+
+```
+
+#### Autocorrelation
+```{r}
+dwtest(ols_model)
+
+```
+
+#### Normality of Residuals
+```{r}
+# Q-Q plot
+qqnorm(residuals(ols_model))
+qqline(residuals(ols_model))
+
+# Shapiro-Wilk test
+shapiro.test(residuals(ols_model))
+
+```
+
+#### Combined
+```{r}
+
+# Heteroscedasticity
+print(bptest(ols_model))
+
+# Multicollinearity
+print(vif(ols_model))
+
+# Autocorrelation
+print(dwtest(ols_model))
+
+# Normality
+shapiro.test(residuals(ols_model))
+
+```
+
+
+### Ridge and PLS Model
+```{r}
+# Ridge Regression Model
+# Prepare matrix for glmnet
+x <- model.matrix(transfer_value ~ . - 1, data = epl)  # '-1' to exclude intercept for glmnet
+y <- epl$transfer_value
+
+# Fit Ridge Regression model
+# Note: It's typical to use cross-validation to find the optimal lambda value.
+# Here, lambda is set as an example; you should consider tuning this parameter.
+ridge_model <- glmnet(x, y, alpha = 0, lambda = 0.7)  
+
+# PLS Regression Model
+# ncomp (number of components) should be selected based on performance considerations.
+pls_model <- plsr(transfer_value ~ ., data = epl, scale = TRUE, ncomp = 2) 
+
+# Summarize the models
+summary(ols_model)  # Summarize OLS model
+print(coef(ridge_model, s = 0.1))   # Print coefficients of Ridge model at lambda = 0.1
+summary(pls_model)  # Summarize PLS model
+
+```
+### 10FCV RMSE Values
+Set Up Cross-Validation and Model Training Control
+```{r}
+# Setting up 10-Fold Cross-Validation
+set.seed(123)  # for reproducibility
+train_control <- trainControl(method = "cv", number = 10, savePredictions = "final")
+
+```
+
+#### OLS RMSE
+```{r}
+# Ordinary Least Squares Regression
+ols_model <- train(transfer_value ~ ., data = epl, method = "lm", trControl = train_control)
+
+```
+
+#### Ridge RMSE
+```{r}
+# Ridge Regression with Lambda Tuning
+ridge_model <- train(transfer_value ~ ., data = epl, method = "glmnet",
+                     tuneGrid = expand.grid(alpha = 0, lambda = seq(0.001, 0.07, length = 10)),
+                     trControl = train_control)
+
+```
+
+#### PLS RMSE
+```{r}
+# Partial Least Squares Regression with Component Number Tuning
+pls_model <- train(transfer_value ~ ., data = epl, method = "pls",
+                   tuneLength = 10,  # tries up to 10 components
+                   trControl = train_control)
+
+```
+
+#### Evaluate RMSE for 3 models
+```{r}
+# Extracting RMSE results
+ols_rmse <- ols_model$results$RMSE
+ridge_rmse <- ridge_model$results$RMSE[which.min(ridge_model$results$RMSE)]
+pls_rmse <- pls_model$results$RMSE[which.min(pls_model$results$RMSE)]
+
+# Display RMSEs
+print(paste("OLS RMSE:", ols_rmse))
+print(paste("Ridge RMSE:", ridge_rmse))
+print(paste("PLS RMSE:", pls_rmse))
+
+```
+
+### LOOCV RMSE
+Set Up LOOCV and Model Training Control
+```{r}
+# Setting up LOOCV
+train_control_loocv <- trainControl(method = "LOOCV", savePredictions = "final")
+
+```
+
+#### OLS RMSE
+```{r}
+# Ordinary Least Squares Regression with LOOCV
+ols_model_loocv <- train(transfer_value ~ ., data = epl, method = "lm", trControl = train_control_loocv)
+
+```
+
+#### Ridge RMSE
+```{r}
+# Ridge Regression with Lambda Tuning and LOOCV
+ridge_model_loocv <- train(transfer_value ~ ., data = epl, method = "glmnet",
+                           tuneGrid = expand.grid(alpha = 0, lambda = seq(0.001, 0.7, length = 10)),
+                           trControl = train_control_loocv)
+
+```
+
+#### PLS
+```{r}
+# Partial Least Squares Regression with Component Number Tuning and LOOCV
+pls_model_loocv <- train(transfer_value ~ ., data = epl, method = "pls",
+                         tuneLength = 10,  # tries up to 10 components
+                         trControl = train_control_loocv)
+
+```
+
+#### Evaluate RMSE for 3 Models
+```{r}
+# Extracting RMSE from LOOCV results
+ols_rmse_loocv <- ols_model_loocv$results$RMSE
+ridge_rmse_loocv <- ridge_model_loocv$results$RMSE[which.min(ridge_model_loocv$results$RMSE)]
+pls_rmse_loocv <- pls_model_loocv$results$RMSE[which.min(pls_model_loocv$results$RMSE)]
+
+# Display RMSEs
+print(paste("OLS RMSE (LOOCV):", ols_rmse_loocv))
+print(paste("Ridge RMSE (LOOCV):", ridge_rmse_loocv))
+print(paste("PLS RMSE (LOOCV):", pls_rmse_loocv))
+
+```
+# Extended Model (Interaction)
+
+```{r}
+# Create interaction term between age and appear
+epl$age_appear <- epl$age * epl$appear
+
+```
+
+### OLS, Ridge and PLS
+
+```{r}
+# OLS Model with the interaction term
+ols_model_inter <- lm(transfer_value ~ . + age:appear, data = epl)
+
+```
+
+```{r}
+# Prepare matrix for glmnet including the interaction term
+x_inter <- model.matrix(transfer_value ~ . + age:appear - 1, data = epl)  # '-1' to exclude intercept
+y_inter <- epl$transfer_value
+
+# Fit Ridge Regression model with the interaction term
+ridge_model_inter <- glmnet(x_inter, y_inter, alpha = 0, lambda = 0.7)  # Tune lambda as needed
+
+```
+
+```{r}
+# PLS Regression with the interaction term
+pls_model_inter <- plsr(transfer_value ~ . + age:appear, data = epl, scale = TRUE, ncomp = 2)  # Adjust ncomp as necessary
+
+```
+
+```{r}
+# Summarize the models with the interaction term
+summary(ols_model_inter)  # Summarize OLS model with interaction
+print(coef(ridge_model_inter, s = 0.1))  # Print coefficients of Ridge model at a specific lambda
+summary(pls_model_inter)  # Summarize PLS model with interaction
+
+```
+#### Visualizing the PLS Model
+```{r}
+# Load necessary library
+library(ggplot2)
+
+# Define the data frame
+data <- data.frame(
+  Category = c("Predictor Variance (2 comps)", "Transfer Value Variance (2 comps)"),
+  Percentage = c(80.92, 10.36)
+)
+
+# Create the bar chart
+p <- ggplot(data, aes(x = Category, y = Percentage, fill = Category)) +
+  geom_bar(stat = "identity", width = 0.5, show.legend = FALSE) + # Use identity to use y-values from the data frame
+  geom_text(aes(label = paste0(Percentage, "%")), vjust = -0.5, size = 5) + # Add text labels on top of the bars
+  labs(title = "Variance Explained by PLS Model",
+       y = "Percentage (%)",
+       x = NULL) + # Removing x-axis label for clarity
+  theme_minimal() + # Minimal theme for a clean look
+  theme(plot.title = element_text(hjust = 0.5), # Center the plot title
+        axis.text.x = element_text(angle = 0, hjust = 1)) # Rotate x labels for better readability
+
+# Print the plot
+print(p)
+
+```
+
+### 10FCV RMSE Values
+
+#### OLS RMSE
+```{r}
+# OLS Model with interactions
+ols_model_inter_cv <- train(transfer_value ~ . + age:appear, data = epl, method = "lm", trControl = train_control)
+
+summary(ols_model_inter_cv)
+```
+
+#### Ridge RMSE
+```{r}
+# Prepare matrix for glmnet including interactions
+x_inter <- model.matrix(transfer_value ~ . + age:appear - 1, data = epl)  # '-1' to exclude intercept for glmnet
+y_inter <- epl$transfer_value
+
+# Fit Ridge Regression model with interaction terms and 10FCV
+ridge_model_inter_cv <- train(x_inter, y_inter, method = "glmnet",
+                              tuneGrid = expand.grid(alpha = 0, lambda = seq(0.001, 0.9, length = 10)),
+                              trControl = train_control)
+ridge_model_inter_cv
+```
+
+#### PLS RMSE
+```{r}
+# PLS Regression with interaction terms and 10FCV
+pls_model_inter_cv <- train(transfer_value ~ . + age:appear, data = epl, method = "pls",
+                            tuneLength = 10,  # tries up to 10 components
+                            trControl = train_control)
+pls_model_inter_cv
+```
+
+#### Evaluate RMSE
+```{r}
+# Extracting RMSE results from 10FCV
+ols_rmse_inter_cv <- ols_model_inter_cv$results$RMSE
+ridge_rmse_inter_cv <- min(ridge_model_inter_cv$results$RMSE)
+pls_rmse_inter_cv <- min(pls_model_inter_cv$results$RMSE)
+
+# Display RMSEs
+print(paste("OLS RMSE (10FCV):", ols_rmse_inter_cv))
+print(paste("Ridge RMSE (10FCV):", ridge_rmse_inter_cv))
+print(paste("PLS RMSE (10FCV):", pls_rmse_inter_cv))
+
+```
+
+### LOOCV RMSE Values
+#### OLS
+```{r}
+# OLS Model with the interaction term
+ols_model_inter_loocv <- train(transfer_value ~ . + age:appear, data = epl, method = "lm", trControl = train_control_loocv)
+
+```
+
+#### Ridge
+```{r}
+# Prepare matrix for glmnet including the interaction term
+x_inter_loocv <- model.matrix(transfer_value ~ . + age:appear - 1, data = epl)  # '-1' to exclude intercept for glmnet
+y_inter_loocv <- epl$transfer_value
+
+# Fit Ridge Regression model with the interaction term and LOOCV
+ridge_model_inter_loocv <- train(x_inter_loocv, y_inter_loocv, method = "glmnet",
+                                 tuneGrid = expand.grid(alpha = 0, lambda = seq(0.001, 0.1, length = 10)),
+                                 trControl = train_control_loocv)
+
+```
+
+#### PLS
+```{r}
+# PLS Regression with the interaction term and LOOCV
+pls_model_inter_loocv <- train(transfer_value ~ . + age:appear, data = epl, method = "pls",
+                               tuneLength = 10,  # tries up to 10 components
+                               trControl = train_control_loocv)
+
+```
+
+#### Evaluate RMSE
+```{r}
+# Extracting RMSE from LOOCV results
+ols_rmse_inter_loocv <- ols_model_inter_loocv$results$RMSE
+ridge_rmse_inter_loocv <- min(ridge_model_inter_loocv$results$RMSE)
+pls_rmse_inter_loocv <- min(pls_model_inter_loocv$results$RMSE)
+
+# Display RMSEs
+print(paste("OLS RMSE (LOOCV):", ols_rmse_inter_loocv))
+print(paste("Ridge RMSE (LOOCV):", ridge_rmse_inter_loocv))
+print(paste("PLS RMSE (LOOCV):", pls_rmse_inter_loocv))
+
+```
+
+
+
+# Compare Results
+```{r}
+
+# OLS Model RMSE Variables
+ols_rmse # RMSE for the basic OLS model using 10FCV.
+ols_rmse_loocv # RMSE for the basic OLS model using LOOCV.
+ols_rmse_inter_cv # RMSE for the extended OLS model (with interaction term) using 10FCV.
+ols_rmse_inter_loocv # RMSE for the extended OLS model (with interaction term) using LOOCV.
+
+# Ridge Model RMSE Variables
+ridge_rmse # RMSE for the basic Ridge model using 10FCV.
+ridge_rmse_loocv # RMSE for the basic Ridge model using LOOCV.
+ridge_rmse_inter_cv # RMSE for the extended Ridge model (with interaction term) using 10FCV.
+ridge_rmse_inter_loocv # RMSE for the extended Ridge model (with interaction term) using LOOCV.
+
+# PLS Model RMSE Variables
+pls_rmse # RMSE for the basic PLS model using 10FCV.
+pls_rmse_loocv # RMSE for the basic PLS model using LOOCV.
+pls_rmse_inter_cv # RMSE for the extended PLS model (with interaction term) using 10FCV.
+pls_rmse_inter_loocv # RMSE for the extended PLS model (with interaction term) using LOOCV.
+
+```
+```{r}
+# Create data frame
+mse_data <- rbind(
+  c(ols_rmse, ols_rmse_loocv),
+  c(ols_rmse_inter_cv, ols_rmse_inter_loocv),
+  c(ridge_rmse, ridge_rmse_loocv),
+  c(ridge_rmse_inter_cv, ridge_rmse_inter_loocv),
+  c(pls_rmse, pls_rmse_loocv),
+  c(pls_rmse_inter_cv, pls_rmse_inter_loocv)
+)
+
+# Set custom row names and column names
+rownames(mse_data) <- c("Train OLS", "Extended OLS", "Train Ridge", "Extended Ridge", "Train PLS", "Extended PLS")
+colnames(mse_data) <- c("10FCV RMSE", "LOOCV RMSE")
+
+# Use knitr::kable to format this data frame into a Markdown-friendly table
+library(knitr)
+kable(mse_data, format = "simple", digits = 3, caption = "RMSE Values for Different Models and Validation Methods")
+
+```
+
+
+
